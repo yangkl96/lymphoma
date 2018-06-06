@@ -1,0 +1,102 @@
+---
+title: "tensorflow"
+output: html_document
+---
+
+```{r}
+require('devtools')
+#devtools::install_github("rstudio/tfestimators")
+require(tfestimators)
+#install_tensorflow()   #looks like tensorflow is an environment
+```
+
+
+```{r}
+require(readr)
+require(dplyr)
+ 
+donor <- read_csv("https://www.dropbox.com/s/ntd5tbhr7fxmrr4/DonorSampleDataCleaned.csv?raw=1")
+glimpse(donor)
+```
+
+
+```{r}
+# function copied from
+# https://stackoverflow.com/a/8189441/934898
+my_mode <- function(x) {
+    ux <- unique(x)
+    ux[which.max(tabulate(match(x, ux)))]
+}
+ 
+donor <- donor %>% 
+  mutate_if(is.numeric, 
+            .funs = funs(
+              ifelse(is.na(.), 
+                     median(., na.rm = TRUE),
+                     .))) %>%
+  mutate_if(is.character, 
+            .funs = funs(
+              ifelse(is.na(.), 
+                     my_mode(.),
+                     .)))
+```
+
+```{r}
+predictor_cols <- c("MARITAL_STATUS", "GENDER", 
+                    "ALUMNUS_IND", "PARENT_IND", 
+                    "WEALTH_RATING", "PREF_ADDRESS_TYPE")
+ 
+# Convert feature to factor
+donor <- mutate_at(donor, .vars = predictor_cols, .funs = as.factor)
+```
+
+```{r}
+#to my knowledge, taking all values that each predictor can have
+#column_indicator also does one hot encoding
+feature_cols <- feature_columns(
+  column_indicator(
+    column_categorical_with_vocabulary_list(
+      "MARITAL_STATUS", 
+      vocabulary_list = unique(donor$MARITAL_STATUS))), 
+    column_indicator(
+      column_categorical_with_vocabulary_list(
+        "GENDER", 
+        vocabulary_list = unique(donor$GENDER))), 
+    column_indicator(
+      column_categorical_with_vocabulary_list(
+        "ALUMNUS_IND", 
+        vocabulary_list = unique(donor$ALUMNUS_IND))), 
+    column_indicator(
+      column_categorical_with_vocabulary_list(
+        "PARENT_IND", 
+        vocabulary_list = unique(donor$PARENT_IND))), 
+    column_indicator(
+      column_categorical_with_vocabulary_list(
+        "WEALTH_RATING", 
+        vocabulary_list = unique(donor$WEALTH_RATING))), 
+    column_indicator(
+      column_categorical_with_vocabulary_list(
+        "PREF_ADDRESS_TYPE", 
+        vocabulary_list = unique(donor$PREF_ADDRESS_TYPE))), 
+    column_numeric("AGE"))
+```
+
+```{r}
+#divide data 80/20 test/train
+row_indices <- sample(1:nrow(donor), 
+                      size = 0.8 * nrow(donor))
+donor_train <- donor[row_indices, ]
+donor_test <- donor[-row_indices, ]
+```
+
+```{r}
+donor_pred_fn <- function(data) {
+    input_fn(data, #input_fun for tf_estimators
+             features = c("AGE", "MARITAL_STATUS", 
+                          "GENDER", "ALUMNUS_IND", 
+                          "PARENT_IND", "WEALTH_RATING", 
+                          "PREF_ADDRESS_TYPE"), 
+             response = "DONOR_IND")
+}
+```
+
